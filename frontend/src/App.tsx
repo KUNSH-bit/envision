@@ -11,8 +11,8 @@ import type { SetupConfiguration } from "./types/setup";
 const initialConfig: SetupConfiguration = {
   operatingSystem: "",
   osVersion: "",
-  environmentType: "",
   linuxDistribution: "",
+  environmentType: "",
   editors: [],
   languages: [],
   purposes: []
@@ -25,41 +25,79 @@ function App() {
   const [config, setConfig] =
     useState<SetupConfiguration>(initialConfig);
 
-  const question = questions[step];
+  // Only show questions whose conditions are satisfied.
+  const visibleQuestions = questions.filter(
+    question => !question.when || question.when(config)
+  );
 
-  const selected = config[
-    question.id as keyof SetupConfiguration
-  ] as string[];
+  const question = visibleQuestions[step];
 
-  const handleSelect = (id: string) => {
+  // Show the summary after the last question.
+  const isComplete = step >= visibleQuestions.length;
 
-    const current = config[
-      question.id as keyof SetupConfiguration
-    ];
+  const currentValue = question
+    ? config[question.id]
+    : [];
 
-    if (question.type === "single") {
+  // Normalize single and multiple selections.
+  const selected = Array.isArray(currentValue)
+    ? currentValue
+    : currentValue
+      ? [currentValue]
+      : [];
 
-      setConfig({
-        ...config,
+  
+const handleSelect = (id: string) => {
+
+  if (!question) return;
+
+  if (question.type === "single") {
+
+    setConfig(prev => {
+
+      const updated = {
+        ...prev,
         [question.id]: id
-      });
+      } as SetupConfiguration;
 
-    } else {
+      if (question.id === "operatingSystem") {
+        updated.osVersion = "";
+        updated.linuxDistribution = "";
+      }
 
-      const values = current as string[];
+      if (
+        question.id === "environmentType" &&
+        id !== "wsl" &&
+        prev.operatingSystem !== "linux"
+      ) {
+        updated.linuxDistribution = "";
+      }
+
+      return updated;
+
+    });
+
+  } else {
+
+    setConfig(prev => {
+
+      const values = prev[question.id] as string[];
 
       const updated = values.includes(id)
         ? values.filter(item => item !== id)
         : [...values, id];
 
-      setConfig({
-        ...config,
+      return {
+        ...prev,
         [question.id]: updated
-      });
+      } as SetupConfiguration;
 
-    }
+    });
 
-  };
+  }
+
+};
+
 
   const canContinue = selected.length > 0;
 
@@ -77,62 +115,152 @@ function App() {
           Let's build your development environment.
         </p>
 
-        <ProgressBar
-          current={step + 1}
-          total={questions.length}
-        />
+        {!isComplete ? (
 
-        <div className="mt-10 mb-8">
+          <>
+            <ProgressBar
+              current={step + 1}
+              total={visibleQuestions.length}
+            />
 
-          <h2 className="text-2xl font-semibold">
-            {question.title}
-          </h2>
+            <div className="mt-10 mb-8">
 
-          <p className="text-gray-400 mt-2">
-            {question.description}
-          </p>
+              <h2 className="text-2xl font-semibold">
+                {question.title}
+              </h2>
 
-        </div>
+              <p className="text-gray-400 mt-2">
+                {question.description}
+              </p>
 
-        <QuestionCard
-          options={question.options}
-          selected={selected}
-          multiple={question.type === "multiple"}
-          onSelect={handleSelect}
-        />
+            </div>
 
-        <div className="flex justify-between mt-10">
+            <QuestionCard
+              options={question.options}
+              selected={selected}
+              multiple={question.type === "multiple"}
+              onSelect={handleSelect}
+            />
 
-          <button
-            onClick={() => setStep(step - 1)}
-            disabled={step === 0}
-            className="px-6 py-3 rounded-lg bg-gray-800 disabled:opacity-30"
-          >
-            Back
-          </button>
+            <div className="flex justify-between mt-10">
 
-          <button
-            onClick={() => {
-              if (step < questions.length - 1) {
-                setStep(step + 1);
-              } else {
+              <button
+                onClick={() => setStep(step - 1)}
+                disabled={step === 0}
+                className="px-6 py-3 rounded-lg bg-gray-800 disabled:opacity-30"
+              >
+                Back
+              </button>
+
+              <button
+                onClick={() => setStep(step + 1)}
+                disabled={!canContinue}
+                className="px-6 py-3 rounded-lg bg-green-600 hover:bg-green-500 disabled:opacity-30"
+              >
+                Continue
+              </button>
+
+            </div>
+          </>
+
+        ) : (
+
+          <div className="mt-10">
+
+            <h2 className="text-3xl font-bold">
+              Your setup is ready!
+            </h2>
+
+            <p className="text-gray-400 mt-2">
+              Here's the configuration you've selected.
+            </p>
+
+            <div className="mt-8 bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
+
+              <SummaryItem
+                label="Operating System"
+                value={config.operatingSystem}
+              />
+
+              <SummaryItem
+                label="OS Version"
+                value={config.osVersion}
+              />
+
+              <SummaryItem
+                label="Linux Distribution"
+                value={config.linuxDistribution}
+              />
+
+              <SummaryItem
+                label="Environment"
+                value={config.environmentType}
+              />
+
+              <SummaryItem
+                label="Editors"
+                value={config.editors.join(", ")}
+              />
+
+              <SummaryItem
+                label="Languages"
+                value={config.languages.join(", ")}
+              />
+
+              <SummaryItem
+                label="Development Purpose"
+                value={config.purposes.join(", ")}
+              />
+
+            </div>
+
+            <button
+              onClick={() => setStep(0)}
+              className="mt-8 px-6 py-3 rounded-lg bg-green-600"
+            >
+              Back to beginning
+            </button>
+
+            <button
+              onClick={() => {
                 console.log("Final configuration:", config);
-              }
-            }}
-            disabled={!canContinue}
-            className="px-6 py-3 rounded-lg bg-green-600 hover:bg-green-500 disabled:opacity-30"
-          >
-            {step === questions.length - 1
-              ? "Finish"
-              : "Continue"}
-          </button>
+              }}
+              className="mt-8 ml-3 px-6 py-3 rounded-lg bg-gray-800"
+            >
+              Generate setup plan
+            </button>
 
-        </div>
+          </div>
+
+        )}
 
       </div>
 
     </div>
 
+  );
+}
+
+function SummaryItem({
+  label,
+  value
+}: {
+  label: string;
+  value: string;
+}) {
+
+  if (!value) return null;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-sm text-gray-400">
+        {label}
+      </span>
+
+      <span className="font-medium">
+        {value}
+      </span>
+    </div>
   );
 }
 
