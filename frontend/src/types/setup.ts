@@ -24,3 +24,19 @@ export interface QuestionDefinition {
   options: QuestionOption[];
   when?: (config: SetupConfiguration) => boolean;
 }
+
+
+export interface SetupStep {
+  id: string;
+  title: string;
+  description: string;
+  category: 'installation'|'configuration'|'verification';
+  instructions: string[];
+  verificationCommands?: string[];
+}
+
+export interface SetupPlan {
+  title: string;
+  description: string;
+  steps: SetupStep[];
+}

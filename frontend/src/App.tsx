@@ -5,8 +5,14 @@ import { questions } from "./data/questions";
 
 import QuestionCard from "./components/QuestionCard";
 import ProgressBar from "./components/ProgressBar";
+import SetupPlanView from "./components/SetupPlanView";
 
-import type { SetupConfiguration } from "./types/setup";
+import { generateSetupPlan } from "./utils/generateSetupPlan";
+
+import type {
+  SetupConfiguration,
+  SetupPlan
+} from "./types/setup";
 
 const initialConfig: SetupConfiguration = {
   operatingSystem: "",
@@ -24,6 +30,9 @@ function App() {
 
   const [config, setConfig] =
     useState<SetupConfiguration>(initialConfig);
+
+  const [generatedPlan, setGeneratedPlan] =
+    useState<SetupPlan | null>(null);
 
   // Only show questions whose conditions are satisfied.
   const visibleQuestions = questions.filter(
@@ -46,58 +55,59 @@ function App() {
       ? [currentValue]
       : [];
 
-  
-const handleSelect = (id: string) => {
+  const handleSelect = (id: string) => {
 
-  if (!question) return;
+    if (!question) return;
 
-  if (question.type === "single") {
+    // Clear an old plan when answers change.
+    setGeneratedPlan(null);
 
-    setConfig(prev => {
+    if (question.type === "single") {
 
-      const updated = {
-        ...prev,
-        [question.id]: id
-      } as SetupConfiguration;
+      setConfig(prev => {
 
-      if (question.id === "operatingSystem") {
-        updated.osVersion = "";
-        updated.linuxDistribution = "";
-      }
+        const updated = {
+          ...prev,
+          [question.id]: id
+        } as SetupConfiguration;
 
-      if (
-        question.id === "environmentType" &&
-        id !== "wsl" &&
-        prev.operatingSystem !== "linux"
-      ) {
-        updated.linuxDistribution = "";
-      }
+        if (question.id === "operatingSystem") {
+          updated.osVersion = "";
+          updated.linuxDistribution = "";
+        }
 
-      return updated;
+        if (
+          question.id === "environmentType" &&
+          id !== "wsl" &&
+          prev.operatingSystem !== "linux"
+        ) {
+          updated.linuxDistribution = "";
+        }
 
-    });
+        return updated;
 
-  } else {
+      });
 
-    setConfig(prev => {
+    } else {
 
-      const values = prev[question.id] as string[];
+      setConfig(prev => {
 
-      const updated = values.includes(id)
-        ? values.filter(item => item !== id)
-        : [...values, id];
+        const values = prev[question.id] as string[];
 
-      return {
-        ...prev,
-        [question.id]: updated
-      } as SetupConfiguration;
+        const updated = values.includes(id)
+          ? values.filter(item => item !== id)
+          : [...values, id];
 
-    });
+        return {
+          ...prev,
+          [question.id]: updated
+        } as SetupConfiguration;
 
-  }
+      });
 
-};
+    }
 
+  };
 
   const canContinue = selected.length > 0;
 
@@ -118,6 +128,7 @@ const handleSelect = (id: string) => {
         {!isComplete ? (
 
           <>
+
             <ProgressBar
               current={step + 1}
               total={visibleQuestions.length}
@@ -161,6 +172,7 @@ const handleSelect = (id: string) => {
               </button>
 
             </div>
+
           </>
 
         ) : (
@@ -214,24 +226,36 @@ const handleSelect = (id: string) => {
 
             </div>
 
-            <button
-              onClick={() => setStep(0)}
-              className="mt-8 px-6 py-3 rounded-lg bg-green-600"
-            >
-              Back to beginning
-            </button>
+            <div className="flex flex-wrap gap-3 mt-8">
 
-            <button
-              onClick={() => {
-                console.log("Final configuration:", config);
-              }}
-              className="mt-8 ml-3 px-6 py-3 rounded-lg bg-gray-800"
-            >
-              Generate setup plan
-            </button>
+              <button
+                onClick={() => {
+                  setGeneratedPlan(null);
+                  setStep(0);
+                }}
+                className="px-6 py-3 rounded-lg bg-green-600 hover:bg-green-500"
+              >
+                Back to beginning
+              </button>
+
+              <button
+                onClick={() => {
+                  const plan = generateSetupPlan(config);
+                  setGeneratedPlan(plan);
+                }}
+                className="px-6 py-3 rounded-lg bg-gray-800 hover:bg-gray-700"
+              >
+                Generate setup plan
+              </button>
+
+            </div>
 
           </div>
 
+        )}
+
+        {generatedPlan && (
+          <SetupPlanView plan={generatedPlan} />
         )}
 
       </div>
@@ -252,7 +276,9 @@ function SummaryItem({
   if (!value) return null;
 
   return (
+
     <div className="flex flex-col gap-1">
+
       <span className="text-sm text-gray-400">
         {label}
       </span>
@@ -260,8 +286,11 @@ function SummaryItem({
       <span className="font-medium">
         {value}
       </span>
+
     </div>
+
   );
+
 }
 
 export default App;
