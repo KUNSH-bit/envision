@@ -71,12 +71,20 @@ function IssueHelp({ onBack }: IssueHelpProps) {
   const [searchResponse, setSearchResponse] =
     useState<SearchResponse | null>(null);
 
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(
+    null
+  );
+
   const [completedSteps, setCompletedSteps] = useState<
     Record<string, boolean>
   >({});
 
   const [copiedCommand, setCopiedCommand] = useState("");
   const [copyError, setCopyError] = useState("");
+
+  const selectedIssue = searchResponse?.results.find(
+    issue => issue.id === selectedIssueId
+  );
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -88,6 +96,7 @@ function IssueHelp({ onBack }: IssueHelpProps) {
     setLoading(true);
     setError("");
     setSearchResponse(null);
+    setSelectedIssueId(null);
     setCompletedSteps({});
     setCopiedCommand("");
     setCopyError("");
@@ -133,6 +142,7 @@ function IssueHelp({ onBack }: IssueHelpProps) {
     setLanguage("");
     setError("");
     setSearchResponse(null);
+    setSelectedIssueId(null);
     setCompletedSteps({});
     setCopiedCommand("");
     setCopyError("");
@@ -210,7 +220,6 @@ function IssueHelp({ onBack }: IssueHelpProps) {
             return (
               <details
                 key={step.id}
-                open={index === 0 ? undefined : false}
                 className={`rounded-xl border ${
                   isCompleted
                     ? "border-green-800 bg-green-950/10"
@@ -242,9 +251,7 @@ function IssueHelp({ onBack }: IssueHelpProps) {
                     {isCompleted ? "Completed" : "View step"}
                   </span>
 
-                  <span className="text-gray-400">
-                    ▾
-                  </span>
+                  <span className="text-gray-400">▾</span>
                 </summary>
 
                 <div className="px-4 pb-4">
@@ -316,6 +323,82 @@ function IssueHelp({ onBack }: IssueHelpProps) {
     );
   };
 
+  const renderSources = (sources: Source[]) => {
+    if (sources.length === 0) {
+      return (
+        <p className="text-xs text-yellow-400 mt-4">
+          No sources have been attached to this solution yet.
+        </p>
+      );
+    }
+
+    return (
+      <div className="mt-5">
+        <h6 className="text-sm font-medium mb-3">
+          Official documentation and sources
+        </h6>
+
+        <ul className="space-y-2">
+          {sources.map(source => (
+            <li key={source.id}>
+              <a
+                href={source.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-blue-400 hover:underline"
+              >
+                {source.title} — {source.publisher} ↗
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
+
+  const renderTutorials = (tutorials: Tutorial[]) => {
+    if (tutorials.length === 0) {
+      return null;
+    }
+
+    return (
+      <div className="mt-5">
+        <h6 className="text-sm font-medium mb-3">
+          Related tutorials
+        </h6>
+
+        <div className="space-y-3">
+          {tutorials.map(tutorial => (
+            <div
+              key={tutorial.id}
+              className="p-3 rounded-lg bg-gray-950 border border-gray-800"
+            >
+              <p className="font-medium text-blue-300">
+                {tutorial.title}
+              </p>
+
+              <p className="text-sm text-gray-400 mt-1">
+                {tutorial.description}
+              </p>
+
+              {tutorial.sources.map(source => (
+                <a
+                  key={source.id}
+                  href={source.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block text-xs text-blue-400 hover:underline mt-2"
+                >
+                  {source.title} ↗
+                </a>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="mt-10">
       <button
@@ -334,82 +417,84 @@ function IssueHelp({ onBack }: IssueHelpProps) {
 
         <p className="text-gray-400 mt-3">
           Describe the problem you're facing. DevSetup will
-          search its knowledge base for matching issues and solutions.
+          search its knowledge base for possible matching issues.
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label className="block text-sm font-medium mb-2">
-            Describe your issue
-          </label>
-
-          <textarea
-            value={description}
-            onChange={event => setDescription(event.target.value)}
-            placeholder="Example: When I run g++ --version, Windows says that g++ is not recognized as an internal or external command..."
-            rows={6}
-            maxLength={3000}
-            required
-            className="w-full rounded-xl bg-gray-900 border border-gray-700 p-4 text-white placeholder-gray-500 outline-none focus:border-green-500 resize-y"
-          />
-
-          <p className="text-xs text-gray-500 mt-2">
-            Include the exact error message if possible.
-            {" "}{description.length}/3000
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+      {!searchResponse && (
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label className="block text-sm font-medium mb-2">
-              Operating system
+              Describe your issue
             </label>
 
-            <select
-              value={operatingSystem}
-              onChange={event =>
-                setOperatingSystem(event.target.value)
-              }
-              className="w-full rounded-lg bg-gray-900 border border-gray-700 p-3 text-white outline-none focus:border-green-500"
-            >
-              <option value="Windows">Windows</option>
-              <option value="Linux">Linux</option>
-              <option value="macOS">macOS</option>
-            </select>
+            <textarea
+              value={description}
+              onChange={event => setDescription(event.target.value)}
+              placeholder="Example: When I run g++ --version, Windows says that g++ is not recognized as an internal or external command..."
+              rows={6}
+              maxLength={3000}
+              required
+              className="w-full rounded-xl bg-gray-900 border border-gray-700 p-4 text-white placeholder-gray-500 outline-none focus:border-green-500 resize-y"
+            />
+
+            <p className="text-xs text-gray-500 mt-2">
+              Include the exact error message if possible.
+              {" "}{description.length}/3000
+            </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Programming language or tool
-            </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Operating system
+              </label>
 
-            <select
-              value={language}
-              onChange={event => setLanguage(event.target.value)}
-              className="w-full rounded-lg bg-gray-900 border border-gray-700 p-3 text-white outline-none focus:border-green-500"
-            >
-              <option value="">Not sure / Not applicable</option>
-              <option value="C++">C++</option>
-              <option value="Python">Python</option>
-              <option value="JavaScript">JavaScript</option>
-              <option value="TypeScript">TypeScript</option>
-              <option value="Java">Java</option>
-              <option value="Rust">Rust</option>
-              <option value="VS Code">VS Code</option>
-              <option value="Other">Other</option>
-            </select>
+              <select
+                value={operatingSystem}
+                onChange={event =>
+                  setOperatingSystem(event.target.value)
+                }
+                className="w-full rounded-lg bg-gray-900 border border-gray-700 p-3 text-white outline-none focus:border-green-500"
+              >
+                <option value="Windows">Windows</option>
+                <option value="Linux">Linux</option>
+                <option value="macOS">macOS</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Programming language or tool
+              </label>
+
+              <select
+                value={language}
+                onChange={event => setLanguage(event.target.value)}
+                className="w-full rounded-lg bg-gray-900 border border-gray-700 p-3 text-white outline-none focus:border-green-500"
+              >
+                <option value="">Not sure / Not applicable</option>
+                <option value="C++">C++</option>
+                <option value="Python">Python</option>
+                <option value="JavaScript">JavaScript</option>
+                <option value="TypeScript">TypeScript</option>
+                <option value="Java">Java</option>
+                <option value="Rust">Rust</option>
+                <option value="VS Code">VS Code</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
           </div>
-        </div>
 
-        <button
-          type="submit"
-          disabled={!description.trim() || loading}
-          className="w-full sm:w-auto px-7 py-3 rounded-lg bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
-        >
-          {loading ? "Searching..." : "Find a solution →"}
-        </button>
-      </form>
+          <button
+            type="submit"
+            disabled={!description.trim() || loading}
+            className="w-full sm:w-auto px-7 py-3 rounded-lg bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+          >
+            {loading ? "Searching..." : "Find possible errors →"}
+          </button>
+        </form>
+      )}
 
       {loading && (
         <div className="mt-8 p-5 rounded-xl bg-gray-900 border border-gray-800">
@@ -432,20 +517,20 @@ function IssueHelp({ onBack }: IssueHelpProps) {
           <p className="text-xs text-gray-400 mt-3">
             Check that your backend server is running and that
             PostgreSQL is connected.
-          </p>
-        </div>
+          </p>        </div>
       )}
 
-      {searchResponse && (
+      {searchResponse && !selectedIssue && (
         <div className="mt-10">
           <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
             <div>
               <h3 className="text-2xl font-bold">
-                Search results
+                Possible errors
               </h3>
 
               <p className="text-sm text-gray-400 mt-1">
-                {searchResponse.resultCount} matching issue(s) found
+                {searchResponse.resultCount} possible matching issue(s) found.
+                Select one to view its complete solution.
               </p>
             </div>
 
@@ -453,7 +538,7 @@ function IssueHelp({ onBack }: IssueHelpProps) {
               onClick={handleReset}
               className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm"
             >
-              Ask another issue
+              New search
             </button>
           </div>
 
@@ -470,176 +555,148 @@ function IssueHelp({ onBack }: IssueHelpProps) {
               </p>
             </div>
           ) : (
-            <div className="space-y-6">
-              {searchResponse.results.map(issue => (
-                <div
+            <div className="space-y-3">
+              {searchResponse.results.map((issue, index) => (
+                <button
                   key={issue.id}
-                  className="p-6 rounded-xl bg-gray-900 border border-gray-800"
+                  type="button"
+                  onClick={() => {
+                    setSelectedIssueId(issue.id);
+                    setCopyError("");
+                    setCopiedCommand("");
+                  }}
+                  className="w-full text-left p-5 rounded-xl bg-gray-900 border border-gray-800 hover:border-green-600 hover:bg-gray-900/80 transition-all group"
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs px-2 py-1 rounded bg-green-950 text-green-300">
-                      {issue.severity}
+                  <div className="flex items-center gap-3">
+                    <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-gray-800 text-gray-300 text-sm shrink-0">
+                      {index + 1}
                     </span>
 
-                    <span className="text-xs text-gray-500">
-                      Knowledge base match
-                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="font-semibold text-gray-100 group-hover:text-green-400 transition-colors">
+                          {issue.title}
+                        </h4>
 
-                    {issue.matchScore !== undefined && (
-                      <span className="text-xs text-gray-500">
-                        Match score: {issue.matchScore}
-                      </span>
-                    )}
-                  </div>
-
-                  <h4 className="text-xl font-semibold mt-3">
-                    {issue.title}
-                  </h4>
-
-                  <p className="text-gray-400 mt-2">
-                    {issue.description}
-                  </p>
-
-                  <div className="mt-3 text-xs text-gray-500">
-                    <p>{issue.matchReason}</p>
-
-                    {issue.matchedPhrase && (
-                      <p className="mt-1">
-                        Matched phrase: {issue.matchedPhrase}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="mt-6 space-y-6">
-                    {issue.solutions.length === 0 && (
-                      <p className="text-sm text-yellow-300">
-                        This issue has no saved solutions yet.
-                      </p>
-                    )}
-
-                    {issue.solutions.map(solution => (
-                      <div
-                        key={solution.id}
-                        className="border-t border-gray-800 pt-5"
-                      >
-                        <h5 className="text-lg font-semibold text-green-400">
-                          {solution.title}
-                        </h5>
-
-                        <p className="text-gray-300 mt-2">
-                          {solution.description}
-                        </p>
-
-                        {renderSteps(solution.steps)}
-
-                        {solution.verification && (
-                          <div className="mt-5 p-4 rounded-lg bg-gray-950 border border-gray-800">
-                            <h6 className="font-medium text-green-400">
-                              Verify the solution
-                            </h6>
-
-                            <p className="text-sm text-gray-400 mt-2 leading-6">
-                              {solution.verification}
-                            </p>
-                          </div>
-                        )}
-
-                        {solution.sources.length > 0 && (
-                          <div className="mt-5">
-                            <h6 className="text-sm font-medium mb-3">
-                              Official documentation and sources
-                            </h6>
-
-                            <ul className="space-y-2">
-                              {solution.sources.map(source => (
-                                <li key={source.id}>
-                                  <a
-                                    href={source.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-sm text-blue-400 hover:underline"
-                                  >
-                                    {source.title} — {source.publisher}
-                                    {" ↗"}
-                                  </a>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {solution.tutorials.length > 0 && (
-                          <div className="mt-5">
-                            <h6 className="text-sm font-medium mb-3">
-                              Related tutorials
-                            </h6>
-
-                            <div className="space-y-3">
-                              {solution.tutorials.map(tutorial => (
-                                <div
-                                  key={tutorial.id}
-                                  className="p-3 rounded-lg bg-gray-950 border border-gray-800"
-                                >
-                                  <p className="font-medium text-blue-300">
-                                    {tutorial.title}
-                                  </p>
-
-                                  <p className="text-sm text-gray-400 mt-1">
-                                    {tutorial.description}
-                                  </p>
-
-                                  {tutorial.sources.map(source => (
-                                    <a
-                                      key={source.id}
-                                      href={source.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="block text-xs text-blue-400 hover:underline mt-2"
-                                    >
-                                      {source.title} ↗
-                                    </a>
-                                  ))}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {solution.sources.length === 0 && (
-                          <p className="text-xs text-yellow-400 mt-4">
-                            No sources have been attached to this solution yet.
-                          </p>
-                        )}
+                        <span className="text-xs px-2 py-1 rounded bg-green-950 text-green-300">
+                          {issue.severity}
+                        </span>
                       </div>
-                    ))}
-                  </div>
 
-                  {issue.tutorials.length > 0 && (
-                    <div className="border-t border-gray-800 mt-6 pt-5">
-                      <h5 className="font-semibold mb-3">
-                        Related issue tutorials
-                      </h5>
+                      <p className="text-sm text-gray-400 mt-1">
+                        {issue.description}
+                      </p>
 
-                      {issue.tutorials.map(tutorial => (
-                        <div
-                          key={tutorial.id}
-                          className="mb-3 p-3 rounded-lg bg-gray-950 border border-gray-800"
-                        >
-                          <p className="text-blue-300 font-medium">
-                            {tutorial.title}
-                          </p>
-
-                          <p className="text-sm text-gray-400 mt-1">
-                            {tutorial.description}
-                          </p>
-                        </div>
-                      ))}
+                      <p className="text-xs text-gray-500 mt-2">
+                        {issue.solutions.length} saved solution(s)
+                        {issue.matchedPhrase
+                          ? ` · Matched: "${issue.matchedPhrase}"`
+                          : ""}
+                      </p>
                     </div>
-                  )}
-                </div>
+
+                    <span className="text-gray-500 group-hover:text-green-400 text-lg shrink-0">
+                      →
+                    </span>
+                  </div>
+                </button>
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {searchResponse && selectedIssue && (
+        <div className="mt-10">
+          <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
+            <button
+              onClick={() => {
+                setSelectedIssueId(null);
+                setCopyError("");
+                setCopiedCommand("");
+              }}
+              className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm"
+            >
+              ← Back to results
+            </button>
+
+            <button
+              onClick={handleReset}
+              className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm"
+            >
+              New search
+            </button>
+          </div>
+
+          <div className="p-5 sm:p-6 rounded-xl bg-gray-900 border border-gray-800">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs px-2 py-1 rounded bg-green-950 text-green-300">
+                {selectedIssue.severity}
+              </span>
+
+              <span className="text-xs text-gray-500">
+                Knowledge base match
+              </span>
+            </div>
+
+            <h3 className="text-2xl font-bold mt-4">
+              {selectedIssue.title}
+            </h3>
+
+            <p className="text-gray-400 mt-3 leading-7">
+              {selectedIssue.description}
+            </p>
+
+            <div className="mt-3 text-xs text-gray-500">
+              <p>{selectedIssue.matchReason}</p>
+
+              {selectedIssue.matchedPhrase && (
+                <p className="mt-1">
+                  Matched phrase: {selectedIssue.matchedPhrase}
+                </p>
+              )}
+            </div>
+
+            {selectedIssue.solutions.length === 0 && (
+              <p className="text-sm text-yellow-300 mt-6">
+                This issue has no saved solutions yet.
+              </p>
+            )}
+
+            {selectedIssue.solutions.map(solution => (
+              <div
+                key={solution.id}
+                className="border-t border-gray-800 mt-6 pt-6"
+              >
+                <h4 className="text-xl font-semibold text-green-400">
+                  {solution.title}
+                </h4>
+
+                <p className="text-gray-300 mt-2 leading-7">
+                  {solution.description}
+                </p>
+
+                {renderSteps(solution.steps)}
+
+                {solution.verification && (
+                  <div className="mt-6 p-4 rounded-lg bg-gray-950 border border-gray-800">
+                    <h5 className="font-medium text-green-400">
+                      Verify the solution
+                    </h5>
+
+                    <p className="text-sm text-gray-400 mt-2 leading-6">
+                      {solution.verification}
+                    </p>
+                  </div>
+                )}
+
+                {renderSources(solution.sources)}
+                {renderTutorials(solution.tutorials)}
+              </div>
+            ))}
+
+            {renderTutorials(selectedIssue.tutorials)}
+          </div>
 
           {copyError && (
             <div className="mt-5 p-3 rounded-lg bg-yellow-950/30 border border-yellow-800">
@@ -655,4 +712,3 @@ function IssueHelp({ onBack }: IssueHelpProps) {
 }
 
 export default IssueHelp;
-    
