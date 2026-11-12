@@ -46,6 +46,8 @@ interface IssueResult {
   description: string;
   severity: string;
   matchReason: string;
+  matchedPhrase?: string;
+  matchScore?: number;
   solutions: Solution[];
   tutorials: Tutorial[];
 }
@@ -69,6 +71,13 @@ function IssueHelp({ onBack }: IssueHelpProps) {
   const [searchResponse, setSearchResponse] =
     useState<SearchResponse | null>(null);
 
+  const [completedSteps, setCompletedSteps] = useState<
+    Record<string, boolean>
+  >({});
+
+  const [copiedCommand, setCopiedCommand] = useState("");
+  const [copyError, setCopyError] = useState("");
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -79,6 +88,9 @@ function IssueHelp({ onBack }: IssueHelpProps) {
     setLoading(true);
     setError("");
     setSearchResponse(null);
+    setCompletedSteps({});
+    setCopiedCommand("");
+    setCopyError("");
 
     try {
       const response = await fetch(
@@ -121,6 +133,187 @@ function IssueHelp({ onBack }: IssueHelpProps) {
     setLanguage("");
     setError("");
     setSearchResponse(null);
+    setCompletedSteps({});
+    setCopiedCommand("");
+    setCopyError("");
+  };
+
+  const toggleStep = (stepId: string) => {
+    setCompletedSteps(previous => ({
+      ...previous,
+      [stepId]: !previous[stepId]
+    }));
+  };
+
+  const handleCopyCommand = async (
+    command: string,
+    stepId: string
+  ) => {
+    try {
+      await navigator.clipboard.writeText(command);
+
+      setCopiedCommand(stepId);
+      setCopyError("");
+    } catch {
+      setCopyError(
+        "Could not copy automatically. Please select and copy the command manually."
+      );
+    }
+  };
+
+  const getProgress = (steps: TutorialStep[]) => {
+    if (steps.length === 0) {
+      return 0;
+    }
+
+    const completed = steps.filter(
+      step => completedSteps[step.id]
+    ).length;
+
+    return Math.round((completed / steps.length) * 100);
+  };
+
+  const renderSteps = (steps: TutorialStep[]) => {
+    if (steps.length === 0) {
+      return (
+        <p className="text-sm text-gray-500 mt-4">
+          No detailed steps have been added to this solution yet.
+        </p>
+      );
+    }
+
+    const progress = getProgress(steps);
+
+    return (
+      <div className="mt-5">
+        <div className="flex justify-between items-center mb-2">
+          <h6 className="font-semibold text-gray-200">
+            Follow these steps
+          </h6>
+
+          <span className="text-xs text-green-400">
+            {progress}% completed
+          </span>
+        </div>
+
+        <div className="w-full h-2 rounded-full bg-gray-800 overflow-hidden mb-5">
+          <div
+            className="h-full bg-green-500 transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        <div className="space-y-3">
+          {steps.map((step, index) => {
+            const isCompleted = Boolean(completedSteps[step.id]);
+
+            return (
+              <details
+                key={step.id}
+                open={index === 0 ? undefined : false}
+                className={`rounded-xl border ${
+                  isCompleted
+                    ? "border-green-800 bg-green-950/10"
+                    : "border-gray-800 bg-gray-950/50"
+                }`}
+              >
+                <summary className="flex items-center gap-3 p-4 cursor-pointer list-none">
+                  <span
+                    className={`flex items-center justify-center w-8 h-8 shrink-0 rounded-full text-sm font-semibold ${
+                      isCompleted
+                        ? "bg-green-600 text-white"
+                        : "bg-gray-800 text-gray-300"
+                    }`}
+                  >
+                    {isCompleted ? "✓" : index + 1}
+                  </span>
+
+                  <span
+                    className={`flex-1 font-medium ${
+                      isCompleted
+                        ? "text-green-400"
+                        : "text-gray-200"
+                    }`}
+                  >
+                    {step.title}
+                  </span>
+
+                  <span className="text-gray-500 text-xs">
+                    {isCompleted ? "Completed" : "View step"}
+                  </span>
+
+                  <span className="text-gray-400">
+                    ▾
+                  </span>
+                </summary>
+
+                <div className="px-4 pb-4">
+                  <div className="border-t border-gray-800 pt-4">
+                    <p className="text-sm text-gray-300 leading-7 whitespace-pre-line">
+                      {step.instructions}
+                    </p>
+
+                    {step.command && (
+                      <div className="mt-4">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                            Command
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCopyCommand(
+                                step.command!,
+                                step.id
+                              )
+                            }
+                            className="text-xs px-3 py-1.5 rounded-md bg-gray-800 hover:bg-gray-700 text-gray-300"
+                          >
+                            {copiedCommand === step.id
+                              ? "✓ Copied"
+                              : "Copy command"}
+                          </button>
+                        </div>
+
+                        <pre className="p-4 rounded-lg bg-black border border-gray-800 overflow-x-auto text-sm text-green-300 whitespace-pre-wrap break-all">
+                          <code>{step.command}</code>
+                        </pre>
+                      </div>
+                    )}
+
+                    {step.expectedOutput && (
+                      <div className="mt-4 p-3 rounded-lg bg-blue-950/20 border border-blue-900/50">
+                        <p className="text-xs font-semibold text-blue-300 mb-1">
+                          EXPECTED RESULT
+                        </p>
+
+                        <p className="text-sm text-gray-300 leading-6">
+                          {step.expectedOutput}
+                        </p>
+                      </div>
+                    )}
+
+                    <label className="flex items-center gap-3 mt-5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isCompleted}
+                        onChange={() => toggleStep(step.id)}
+                        className="w-4 h-4 accent-green-500"
+                      />
+
+                      <span className="text-sm text-gray-300">
+                        I've completed this step
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </details>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -153,7 +346,7 @@ function IssueHelp({ onBack }: IssueHelpProps) {
 
           <textarea
             value={description}
-            onChange={(event) => setDescription(event.target.value)}
+            onChange={event => setDescription(event.target.value)}
             placeholder="Example: When I run g++ --version, Windows says that g++ is not recognized as an internal or external command..."
             rows={6}
             maxLength={3000}
@@ -163,7 +356,7 @@ function IssueHelp({ onBack }: IssueHelpProps) {
 
           <p className="text-xs text-gray-500 mt-2">
             Include the exact error message if possible.
-            {description.length}/3000
+            {" "}{description.length}/3000
           </p>
         </div>
 
@@ -175,7 +368,7 @@ function IssueHelp({ onBack }: IssueHelpProps) {
 
             <select
               value={operatingSystem}
-              onChange={(event) =>
+              onChange={event =>
                 setOperatingSystem(event.target.value)
               }
               className="w-full rounded-lg bg-gray-900 border border-gray-700 p-3 text-white outline-none focus:border-green-500"
@@ -193,7 +386,7 @@ function IssueHelp({ onBack }: IssueHelpProps) {
 
             <select
               value={language}
-              onChange={(event) => setLanguage(event.target.value)}
+              onChange={event => setLanguage(event.target.value)}
               className="w-full rounded-lg bg-gray-900 border border-gray-700 p-3 text-white outline-none focus:border-green-500"
             >
               <option value="">Not sure / Not applicable</option>
@@ -278,7 +471,7 @@ function IssueHelp({ onBack }: IssueHelpProps) {
             </div>
           ) : (
             <div className="space-y-6">
-              {searchResponse.results.map((issue) => (
+              {searchResponse.results.map(issue => (
                 <div
                   key={issue.id}
                   className="p-6 rounded-xl bg-gray-900 border border-gray-800"
@@ -291,6 +484,12 @@ function IssueHelp({ onBack }: IssueHelpProps) {
                     <span className="text-xs text-gray-500">
                       Knowledge base match
                     </span>
+
+                    {issue.matchScore !== undefined && (
+                      <span className="text-xs text-gray-500">
+                        Match score: {issue.matchScore}
+                      </span>
+                    )}
                   </div>
 
                   <h4 className="text-xl font-semibold mt-3">
@@ -301,18 +500,24 @@ function IssueHelp({ onBack }: IssueHelpProps) {
                     {issue.description}
                   </p>
 
-                  <p className="text-xs text-gray-500 mt-3">
-                    {issue.matchReason}
-                  </p>
+                  <div className="mt-3 text-xs text-gray-500">
+                    <p>{issue.matchReason}</p>
 
-                  <div className="mt-6 space-y-5">
+                    {issue.matchedPhrase && (
+                      <p className="mt-1">
+                        Matched phrase: {issue.matchedPhrase}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="mt-6 space-y-6">
                     {issue.solutions.length === 0 && (
                       <p className="text-sm text-yellow-300">
                         This issue has no saved solutions yet.
                       </p>
                     )}
 
-                    {issue.solutions.map((solution) => (
+                    {issue.solutions.map(solution => (
                       <div
                         key={solution.id}
                         className="border-t border-gray-800 pt-5"
@@ -325,68 +530,37 @@ function IssueHelp({ onBack }: IssueHelpProps) {
                           {solution.description}
                         </p>
 
-                        {solution.steps.length > 0 && (
-                          <div className="mt-4">
-                            <h6 className="font-medium mb-3">
-                              Follow these steps
-                            </h6>
-
-                            <ol className="space-y-4 list-decimal list-inside">
-                              {solution.steps.map((step) => (
-                                <li key={step.id}>
-                                  <span className="font-medium">
-                                    {step.title}
-                                  </span>
-
-                                  <p className="text-sm text-gray-400 mt-1 ml-6">
-                                    {step.instructions}
-                                  </p>
-
-                                  {step.command && (
-                                    <pre className="mt-2 ml-6 p-3 rounded-lg bg-gray-950 border border-gray-800 overflow-x-auto text-sm text-green-300">
-                                      <code>{step.command}</code>
-                                    </pre>
-                                  )}
-
-                                  {step.expectedOutput && (
-                                    <p className="text-xs text-gray-500 mt-2 ml-6">
-                                      Expected result: {step.expectedOutput}
-                                    </p>
-                                  )}
-                                </li>
-                              ))}
-                            </ol>
-                          </div>
-                        )}
+                        {renderSteps(solution.steps)}
 
                         {solution.verification && (
                           <div className="mt-5 p-4 rounded-lg bg-gray-950 border border-gray-800">
-                            <h6 className="font-medium">
+                            <h6 className="font-medium text-green-400">
                               Verify the solution
                             </h6>
 
-                            <p className="text-sm text-gray-400 mt-2">
+                            <p className="text-sm text-gray-400 mt-2 leading-6">
                               {solution.verification}
                             </p>
                           </div>
                         )}
 
                         {solution.sources.length > 0 && (
-                          <div className="mt-4">
-                            <h6 className="text-sm font-medium mb-2">
-                              Sources
+                          <div className="mt-5">
+                            <h6 className="text-sm font-medium mb-3">
+                              Official documentation and sources
                             </h6>
 
                             <ul className="space-y-2">
-                              {solution.sources.map((source) => (
+                              {solution.sources.map(source => (
                                 <li key={source.id}>
                                   <a
                                     href={source.url}
                                     target="_blank"
-                                    rel="noreferrer"
+                                    rel="noopener noreferrer"
                                     className="text-sm text-blue-400 hover:underline"
                                   >
                                     {source.title} — {source.publisher}
+                                    {" ↗"}
                                   </a>
                                 </li>
                               ))}
@@ -395,26 +569,83 @@ function IssueHelp({ onBack }: IssueHelpProps) {
                         )}
 
                         {solution.tutorials.length > 0 && (
-                          <div className="mt-4">
-                            <h6 className="text-sm font-medium mb-2">
+                          <div className="mt-5">
+                            <h6 className="text-sm font-medium mb-3">
                               Related tutorials
                             </h6>
 
-                            {solution.tutorials.map((tutorial) => (
-                              <p
-                                key={tutorial.id}
-                                className="text-sm text-blue-400"
-                              >
-                                {tutorial.title}
-                              </p>
-                            ))}
+                            <div className="space-y-3">
+                              {solution.tutorials.map(tutorial => (
+                                <div
+                                  key={tutorial.id}
+                                  className="p-3 rounded-lg bg-gray-950 border border-gray-800"
+                                >
+                                  <p className="font-medium text-blue-300">
+                                    {tutorial.title}
+                                  </p>
+
+                                  <p className="text-sm text-gray-400 mt-1">
+                                    {tutorial.description}
+                                  </p>
+
+                                  {tutorial.sources.map(source => (
+                                    <a
+                                      key={source.id}
+                                      href={source.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="block text-xs text-blue-400 hover:underline mt-2"
+                                    >
+                                      {source.title} ↗
+                                    </a>
+                                  ))}
+                                </div>
+                              ))}
+                            </div>
                           </div>
+                        )}
+
+                        {solution.sources.length === 0 && (
+                          <p className="text-xs text-yellow-400 mt-4">
+                            No sources have been attached to this solution yet.
+                          </p>
                         )}
                       </div>
                     ))}
                   </div>
+
+                  {issue.tutorials.length > 0 && (
+                    <div className="border-t border-gray-800 mt-6 pt-5">
+                      <h5 className="font-semibold mb-3">
+                        Related issue tutorials
+                      </h5>
+
+                      {issue.tutorials.map(tutorial => (
+                        <div
+                          key={tutorial.id}
+                          className="mb-3 p-3 rounded-lg bg-gray-950 border border-gray-800"
+                        >
+                          <p className="text-blue-300 font-medium">
+                            {tutorial.title}
+                          </p>
+
+                          <p className="text-sm text-gray-400 mt-1">
+                            {tutorial.description}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {copyError && (
+            <div className="mt-5 p-3 rounded-lg bg-yellow-950/30 border border-yellow-800">
+              <p className="text-sm text-yellow-300">
+                {copyError}
+              </p>
             </div>
           )}
         </div>
@@ -424,3 +655,4 @@ function IssueHelp({ onBack }: IssueHelpProps) {
 }
 
 export default IssueHelp;
+    

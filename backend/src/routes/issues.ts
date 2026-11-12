@@ -13,8 +13,156 @@ const operatingSystemMap = {
 
 type SupportedOperatingSystem = keyof typeof operatingSystemMap;
 
+const stopWords = new Set([
+  'a',    'an',    'and', 'are',  'as',   'at',   'but', 'by',
+  'can',  'could', 'do',  'does', 'for',  'from', 'how', 'i',
+  'in',   'is',    'it',  'my',   'of',   'on',   'or',  'the',
+  'this', 'to',    'was', 'were', 'what', 'when', 'why', 'with'
+]);
+
+const distinctiveTokens = new Set([
+  'g++', 'gcc', 'clang', 'mingw', 'msys2', 'cmake', 'compiler', 'python',
+  'node', 'npm', 'typescript', 'java', 'rust', 'postgres', 'postgresql',
+  'prisma', 'vite', 'react'
+]);
+
 function normalize(value: string): string {
-  return value.toLowerCase().trim().replace(/\s+/g, ' ');
+  return value.toLowerCase()
+      .replace(/[^\p{L}\p{N}+#.]+/gu, ' ')
+      .trim()
+      .replace(/\s+/g, ' ');
+}
+
+function tokenize(value: string): string[] {
+  return normalize(value).split(' ').filter(
+      token => token.length > 0 && !stopWords.has(token));
+}
+
+function tokensMatch(first: string, second: string): boolean {
+  if (first === second) {
+    return true;
+  }
+
+  // Handles simple variations such as install / installed.
+  return (
+      first.length >= 5 && second.length >= 5 &&
+      (first.startsWith(second) || second.startsWith(first)));
+}
+
+interface MatchResult {
+  score: number;
+  matchedPhrase: string;
+  reason: string;
+}
+
+function scorePhrase(
+    query: string, queryTokens: string[], phrase: string): MatchResult|null {
+  const normalizedPhrase = normalize(phrase);
+
+  if (!normalizedPhrase) {
+    return null;
+  }
+
+  // Exact phrase match gets the highest priority.
+  if (query.includes(normalizedPhrase)) {
+    return {
+      score: 100,
+      matchedPhrase: phrase,
+      reason: 'Exact error phrase match'
+    };
+  }
+
+  if (normalizedPhrase.length >= 8 && normalizedPhrase.includes(query)) {
+    return {
+      score: 90,
+      matchedPhrase: phrase,
+      reason: 'The stored issue phrase contains your search'
+    };
+  }
+
+  const phraseTokens = tokenize(normalizedPhrase);
+
+  if (queryTokens.length === 0 || phraseTokens.length === 0) {
+    return null;
+  }
+
+  const matchedQueryTokens = queryTokens.filter(
+      queryToken => phraseTokens.some(
+          phraseToken => tokensMatch(queryToken, phraseToken)));
+
+  const matchedPhraseTokens = phraseTokens.filter(
+      phraseToken =>
+          queryTokens.some(queryToken => tokensMatch(queryToken, phraseToken)));
+
+  const sharedCount = matchedQueryTokens.length;
+
+  if (sharedCount === 0) {
+    return null;
+  }
+
+  const queryCoverage = sharedCount / queryTokens.length;
+  const phraseCoverage = matchedPhraseTokens.length / phraseTokens.length;
+
+  let score = queryCoverage * 60 + phraseCoverage * 30;
+
+  if (sharedCount >= 2) {
+    score += 10;
+  }
+
+  // Allow one distinctive technical keyword to identify an issue.
+  if (sharedCount === 1 && distinctiveTokens.has(matchedQueryTokens[0])) {
+    score = Math.max(score, 45);
+  }
+
+  // Avoid weak matches based on unrelated common words.
+  const isGoodMatch = (sharedCount >= 2 && queryCoverage >= 0.4) ||
+      (sharedCount === 1 && distinctiveTokens.has(matchedQueryTokens[0]));
+
+  if (!isGoodMatch) {
+    return null;
+  }
+
+  return {
+    score,
+    matchedPhrase: phrase,
+    reason: 'Matched related technical keywords'
+  };
+}
+
+function getIssueMatch(description: string, issue: {
+  title: string; description: string; errorPatterns: string[];
+}): MatchResult|null {
+  const query = normalize(description);
+  const queryTokens = tokenize(query);
+
+  const searchablePhrases =
+      [issue.title, issue.description, ...issue.errorPatterns];
+
+  const matches =
+      searchablePhrases.map(phrase => scorePhrase(query, queryTokens, phrase))
+          .filter((match): match is MatchResult => match !== null);
+
+  if (matches.length === 0) {
+    return null;
+  }
+
+  matches.sort((a, b) => b.score - a.score);
+
+  return matches[0];
+}
+
+function normalizeLanguage(value: string): string {
+  const language = normalize(value);
+
+  const aliases: Record<string, string> = {
+    cpp: 'c++',
+    'c plus plus': 'c++',
+    'c sharp': 'c#',
+    js: 'javascript',
+    ts: 'typescript'
+  };
+
+  return aliases[language] ?? language;
 }
 
 router.post('/search', async (req: Request, res: Response) => {
@@ -34,7 +182,8 @@ router.post('/search', async (req: Request, res: Response) => {
     }
 
     if (typeof operatingSystem !== 'string' ||
-        !(operatingSystem in operatingSystemMap)) {
+        !Object.prototype.hasOwnProperty.call(
+            operatingSystemMap, operatingSystem)) {
       res.status(400).json(
           {message: 'Please provide a supported operating system.'});
       return;
@@ -49,12 +198,8 @@ router.post('/search', async (req: Request, res: Response) => {
         operatingSystemMap[operatingSystem as SupportedOperatingSystem];
 
     const selectedLanguage =
-        typeof language === 'string' ? normalize(language) : '';
+        typeof language === 'string' ? normalizeLanguage(language) : '';
 
-    const query = normalize(description);
-
-    // Retrieve issues that apply to the selected OS,
-    // including issues that apply to every OS.
     const issues = await prisma.issue.findMany({
       where: {OR: [{os: selectedOS}, {os: null}]},
       include: {
@@ -70,47 +215,33 @@ router.post('/search', async (req: Request, res: Response) => {
       }
     });
 
-    // Apply the optional language filter.
     const languageFilteredIssues = issues.filter(issue => {
       if (!selectedLanguage || !issue.language) {
         return true;
       }
 
-      return normalize(issue.language) === selectedLanguage;
+      return (normalizeLanguage(issue.language) === selectedLanguage);
     });
 
-    // Match the user's description against stored phrases.
-    // This is deterministic matching, not AI.
     const results =
         languageFilteredIssues
             .map(issue => {
-              const searchablePhrases = [
-                issue.title, issue.description, ...issue.errorPatterns
-              ].filter(Boolean);
+              const match = getIssueMatch(description, issue);
 
-              const matchedPhrase = searchablePhrases.find(phrase => {
-                const normalizedPhrase = normalize(phrase);
-
-                if (normalizedPhrase.length < 5) {
-                  return false;
-                }
-
-                return (
-                    query.includes(normalizedPhrase) ||
-                    (normalizedPhrase.length >= 8 &&
-                     normalizedPhrase.includes(query)));
-              });
-
-              if (!matchedPhrase) {
+              if (!match) {
                 return null;
               }
 
               return {
                 ...issue,
-                matchReason: `Matched stored issue phrase: "${matchedPhrase}"`
+                matchReason: match.reason,
+                matchedPhrase: match.matchedPhrase,
+                matchScore: Math.round(match.score)
               };
             })
-            .filter(issue => issue !== null)
+            .filter(
+                (issue): issue is NonNullable<typeof issue> => issue !== null)
+            .sort((a, b) => b.matchScore - a.matchScore)
             .slice(0, 10);
 
     res.json({
