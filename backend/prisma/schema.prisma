@@ -1,0 +1,136 @@
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum OperatingSystem {
+  WINDOWS
+  LINUX
+  MACOS
+}
+
+enum ContentStatus {
+  DRAFT
+  VERIFIED
+  OUTDATED
+}
+
+enum IssueSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Tutorial {
+  id          String        @id @default(cuid())
+  slug        String        @unique
+  title       String
+  description String
+
+  language    String
+  os          OperatingSystem
+  osVersion   String?
+
+  status      ContentStatus @default(DRAFT)
+  version     Int           @default(1)
+
+  lastVerifiedAt DateTime?
+
+  steps       TutorialStep[]
+  issues      Issue[]       @relation("IssueTutorials")
+  solutions   Solution[]    @relation("SolutionTutorials")
+  sources     Source[]
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([language, os, status])
+}
+
+model TutorialStep {
+  id             String   @id @default(cuid())
+  tutorialId     String
+  order          Int
+
+  title          String
+  instructions   String
+  command        String?
+  expectedOutput String?
+
+  tutorial Tutorial @relation(fields: [tutorialId], references: [id], onDelete: Cascade)
+
+  @@unique([tutorialId, order])
+}
+
+model Issue {
+  id           String        @id @default(cuid())
+  title        String
+  description  String
+
+  errorPatterns String[]
+
+  os           OperatingSystem?
+  language     String?
+  severity     IssueSeverity  @default(MEDIUM)
+
+  tutorials    Tutorial[]     @relation("IssueTutorials")
+  solutions    Solution[]
+
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([language, os])
+}
+
+model Solution {
+  id           String   @id @default(cuid())
+  issueId      String
+
+  title        String
+  description  String
+  verification String
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  steps        SolutionStep[]
+  tutorials    Tutorial[] @relation("SolutionTutorials")
+  sources      Source[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model SolutionStep {
+  id             String   @id @default(cuid())
+  solutionId     String
+  order          Int
+
+  title          String
+  instructions   String
+  command        String?
+  expectedOutput String?
+
+  solution Solution @relation(fields: [solutionId], references: [id], onDelete: Cascade)
+
+  @@unique([solutionId, order])
+}
+
+model Source {
+  id             String   @id @default(cuid())
+
+  title          String
+  url            String
+  publisher      String
+  sourceVersion  String?
+  lastVerifiedAt DateTime?
+
+  tutorials      Tutorial[]
+  solutions      Solution[]
+
+  createdAt      DateTime @default(now())
+}
