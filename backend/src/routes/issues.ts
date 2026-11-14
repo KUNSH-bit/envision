@@ -43,7 +43,6 @@ function tokensMatch(first: string, second: string): boolean {
     return true;
   }
 
-  // Handles simple variations such as install / installed.
   return (
       first.length >= 5 && second.length >= 5 &&
       (first.startsWith(second) || second.startsWith(first)));
@@ -63,7 +62,6 @@ function scorePhrase(
     return null;
   }
 
-  // Exact phrase match gets the highest priority.
   if (query.includes(normalizedPhrase)) {
     return {
       score: 100,
@@ -109,12 +107,10 @@ function scorePhrase(
     score += 10;
   }
 
-  // Allow one distinctive technical keyword to identify an issue.
   if (sharedCount === 1 && distinctiveTokens.has(matchedQueryTokens[0])) {
     score = Math.max(score, 45);
   }
 
-  // Avoid weak matches based on unrelated common words.
   const isGoodMatch = (sharedCount >= 2 && queryCoverage >= 0.4) ||
       (sharedCount === 1 && distinctiveTokens.has(matchedQueryTokens[0]));
 
@@ -165,6 +161,7 @@ function normalizeLanguage(value: string): string {
   return aliases[language] ?? language;
 }
 
+// SEARCH: Return matching issue summaries only.
 router.post('/search', async (req: Request, res: Response) => {
   try {
     const {description, operatingSystem, language} = req.body ?? {};
@@ -200,31 +197,29 @@ router.post('/search', async (req: Request, res: Response) => {
     const selectedLanguage =
         typeof language === 'string' ? normalizeLanguage(language) : '';
 
+    // Fetch only the fields required for matching and displaying results.
     const issues = await prisma.issue.findMany({
       where: {OR: [{os: selectedOS}, {os: null}]},
-      include: {
-        solutions: {
-          include: {
-            steps: {orderBy: {order: 'asc'}},
-            tutorials:
-                {include: {steps: {orderBy: {order: 'asc'}}, sources: true}},
-            sources: true
-          }
-        },
-        tutorials: {include: {steps: {orderBy: {order: 'asc'}}, sources: true}}
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        errorPatterns: true,
+        os: true,
+        language: true,
+        severity: true
       }
-    });
-
-    const languageFilteredIssues = issues.filter(issue => {
-      if (!selectedLanguage || !issue.language) {
-        return true;
-      }
-
-      return (normalizeLanguage(issue.language) === selectedLanguage);
     });
 
     const results =
-        languageFilteredIssues
+        issues
+            .filter(issue => {
+              if (!selectedLanguage || !issue.language) {
+                return true;
+              }
+
+              return normalizeLanguage(issue.language) === selectedLanguage;
+            })
             .map(issue => {
               const match = getIssueMatch(description, issue);
 
@@ -232,8 +227,14 @@ router.post('/search', async (req: Request, res: Response) => {
                 return null;
               }
 
+              // Do not return solutions, steps, tutorials or sources here.
               return {
-                ...issue,
+                id: issue.id,
+                title: issue.title,
+                description: issue.description,
+                os: issue.os,
+                language: issue.language,
+                severity: issue.severity,
                 matchReason: match.reason,
                 matchedPhrase: match.matchedPhrase,
                 matchScore: Math.round(match.score)
@@ -252,11 +253,52 @@ router.post('/search', async (req: Request, res: Response) => {
           'Matching issues found.' :
           'No matching issues were found in the current knowledge base.'
     });
+
   } catch (error) {
     console.error('Issue search failed:', error);
 
     res.status(500).json(
         {message: 'Something went wrong while searching for your issue.'});
+  }
+});
+
+// DETAILS: Fetch the full troubleshooting guide for one selected issue.
+router.get('/:id', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+
+    if (typeof id !== 'string') {
+      return res.status(400).json({error: 'Invalid issue ID'});
+    }
+
+    const issue = await prisma.issue.findUnique({
+      where: {id},
+      include: {
+        solutions: {
+          include: {
+            steps: {orderBy: {order: 'asc'}},
+            tutorials:
+                {include: {steps: {orderBy: {order: 'asc'}}, sources: true}},
+            sources: true
+          }
+        },
+        tutorials: {include: {steps: {orderBy: {order: 'asc'}}, sources: true}}
+      }
+    });
+
+    if (!issue) {
+      res.status(404).json({message: 'The requested issue was not found.'});
+      return;
+    }
+
+    res.json({issue});
+
+  } catch (error) {
+    console.error('Failed to fetch issue details:', error);
+
+    res.status(500).json({
+      message: 'Something went wrong while loading the troubleshooting guide.'
+    });
   }
 });
 

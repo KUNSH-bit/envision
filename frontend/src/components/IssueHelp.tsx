@@ -44,10 +44,15 @@ interface IssueResult {
   id: string;
   title: string;
   description: string;
+  os: string | null;
+  language: string | null;
   severity: string;
   matchReason: string;
   matchedPhrase?: string;
   matchScore?: number;
+}
+
+interface IssueDetails extends IssueResult {
   solutions: Solution[];
   tutorials: Tutorial[];
 }
@@ -68,12 +73,18 @@ function IssueHelp({ onBack }: IssueHelpProps) {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
   const [searchResponse, setSearchResponse] =
     useState<SearchResponse | null>(null);
 
-  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(
-    null
-  );
+  const [selectedIssueId, setSelectedIssueId] =
+    useState<string | null>(null);
+
+  const [selectedIssue, setSelectedIssue] =
+    useState<IssueDetails | null>(null);
+
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState("");
 
   const [completedSteps, setCompletedSteps] = useState<
     Record<string, boolean>
@@ -82,11 +93,10 @@ function IssueHelp({ onBack }: IssueHelpProps) {
   const [copiedCommand, setCopiedCommand] = useState("");
   const [copyError, setCopyError] = useState("");
 
-  const selectedIssue = searchResponse?.results.find(
-    issue => issue.id === selectedIssueId
-  );
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  // SEARCH ISSUES
+  const handleSubmit = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
     event.preventDefault();
 
     if (!description.trim()) {
@@ -97,6 +107,8 @@ function IssueHelp({ onBack }: IssueHelpProps) {
     setError("");
     setSearchResponse(null);
     setSelectedIssueId(null);
+    setSelectedIssue(null);
+    setDetailsError("");
     setCompletedSteps({});
     setCopiedCommand("");
     setCopyError("");
@@ -117,7 +129,8 @@ function IssueHelp({ onBack }: IssueHelpProps) {
         }
       );
 
-      const data = await response.json();
+      const data: SearchResponse & { message?: string } =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(
@@ -126,6 +139,7 @@ function IssueHelp({ onBack }: IssueHelpProps) {
       }
 
       setSearchResponse(data);
+
     } catch (err) {
       setError(
         err instanceof Error
@@ -137,17 +151,77 @@ function IssueHelp({ onBack }: IssueHelpProps) {
     }
   };
 
+  // FETCH COMPLETE ISSUE DETAILS
+  const handleSelectIssue = async (issueId: string) => {
+    setSelectedIssueId(issueId);
+    setSelectedIssue(null);
+    setDetailsError("");
+    setDetailsLoading(true);
+    setCopiedCommand("");
+    setCopyError("");
+    setCompletedSteps({});
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/issues/${encodeURIComponent(issueId)}`
+      );
+
+      const data: {
+        issue?: IssueDetails;
+        message?: string;
+        error?: string;
+      } = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+          data.error ||
+          "Could not load issue details."
+        );
+      }
+
+      if (!data.issue) {
+        throw new Error("The server returned an invalid issue.");
+      }
+
+      setSelectedIssue(data.issue);
+
+    } catch (err) {
+      setDetailsError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load the troubleshooting guide."
+      );
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
+  // RESET EVERYTHING
   const handleReset = () => {
     setDescription("");
     setLanguage("");
     setError("");
     setSearchResponse(null);
     setSelectedIssueId(null);
+    setSelectedIssue(null);
+    setDetailsError("");
     setCompletedSteps({});
     setCopiedCommand("");
     setCopyError("");
   };
 
+  // BACK TO SEARCH RESULTS
+  const handleBackToResults = () => {
+    setSelectedIssueId(null);
+    setSelectedIssue(null);
+    setDetailsError("");
+    setCompletedSteps({});
+    setCopiedCommand("");
+    setCopyError("");
+  };
+
+  // TOGGLE STEP COMPLETION
   const toggleStep = (stepId: string) => {
     setCompletedSteps(previous => ({
       ...previous,
@@ -155,6 +229,7 @@ function IssueHelp({ onBack }: IssueHelpProps) {
     }));
   };
 
+  // COPY COMMAND
   const handleCopyCommand = async (
     command: string,
     stepId: string
@@ -171,6 +246,7 @@ function IssueHelp({ onBack }: IssueHelpProps) {
     }
   };
 
+  // CALCULATE PROGRESS
   const getProgress = (steps: TutorialStep[]) => {
     if (steps.length === 0) {
       return 0;
@@ -183,6 +259,7 @@ function IssueHelp({ onBack }: IssueHelpProps) {
     return Math.round((completed / steps.length) * 100);
   };
 
+  // RENDER STEPS
   const renderSteps = (steps: TutorialStep[]) => {
     if (steps.length === 0) {
       return (
@@ -323,8 +400,9 @@ function IssueHelp({ onBack }: IssueHelpProps) {
     );
   };
 
+  // RENDER SOURCES
   const renderSources = (sources: Source[]) => {
-    if (sources.length === 0) {
+    if (!sources || sources.length === 0) {
       return (
         <p className="text-xs text-yellow-400 mt-4">
           No sources have been attached to this solution yet.
@@ -356,8 +434,9 @@ function IssueHelp({ onBack }: IssueHelpProps) {
     );
   };
 
+  // RENDER TUTORIALS
   const renderTutorials = (tutorials: Tutorial[]) => {
-    if (tutorials.length === 0) {
+    if (!tutorials || tutorials.length === 0) {
       return null;
     }
 
@@ -380,6 +459,12 @@ function IssueHelp({ onBack }: IssueHelpProps) {
               <p className="text-sm text-gray-400 mt-1">
                 {tutorial.description}
               </p>
+
+              {tutorial.steps && tutorial.steps.length > 0 && (
+                <div className="mt-4">
+                  {renderSteps(tutorial.steps)}
+                </div>
+              )}
 
               {tutorial.sources.map(source => (
                 <a
@@ -420,6 +505,8 @@ function IssueHelp({ onBack }: IssueHelpProps) {
           search its knowledge base for possible matching issues.
         </p>
       </div>
+
+      {/* SEARCH FORM */}
 
       {!searchResponse && (
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -496,6 +583,8 @@ function IssueHelp({ onBack }: IssueHelpProps) {
         </form>
       )}
 
+      {/* SEARCH LOADING */}
+
       {loading && (
         <div className="mt-8 p-5 rounded-xl bg-gray-900 border border-gray-800">
           <p className="text-gray-300">
@@ -503,6 +592,8 @@ function IssueHelp({ onBack }: IssueHelpProps) {
           </p>
         </div>
       )}
+
+      {/* SEARCH ERROR */}
 
       {error && (
         <div className="mt-8 p-5 rounded-xl bg-red-950/30 border border-red-800">
@@ -517,10 +608,13 @@ function IssueHelp({ onBack }: IssueHelpProps) {
           <p className="text-xs text-gray-400 mt-3">
             Check that your backend server is running and that
             PostgreSQL is connected.
-          </p>        </div>
+          </p>
+        </div>
       )}
 
-      {searchResponse && !selectedIssue && (
+      {/* SEARCH RESULTS */}
+
+      {searchResponse && !selectedIssueId && (
         <div className="mt-10">
           <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
             <div>
@@ -560,11 +654,7 @@ function IssueHelp({ onBack }: IssueHelpProps) {
                 <button
                   key={issue.id}
                   type="button"
-                  onClick={() => {
-                    setSelectedIssueId(issue.id);
-                    setCopyError("");
-                    setCopiedCommand("");
-                  }}
+                  onClick={() => handleSelectIssue(issue.id)}
                   className="w-full text-left p-5 rounded-xl bg-gray-900 border border-gray-800 hover:border-green-600 hover:bg-gray-900/80 transition-all group"
                 >
                   <div className="flex items-center gap-3">
@@ -588,10 +678,16 @@ function IssueHelp({ onBack }: IssueHelpProps) {
                       </p>
 
                       <p className="text-xs text-gray-500 mt-2">
-                        {issue.solutions.length} saved solution(s)
+                        {issue.matchScore !== undefined
+                          ? `Match score: ${issue.matchScore}%`
+                          : ""}
                         {issue.matchedPhrase
                           ? ` · Matched: "${issue.matchedPhrase}"`
                           : ""}
+                      </p>
+
+                      <p className="text-xs text-green-400 mt-2">
+                        Click to view complete troubleshooting guide →
                       </p>
                     </div>
 
@@ -606,15 +702,44 @@ function IssueHelp({ onBack }: IssueHelpProps) {
         </div>
       )}
 
+      {/* ISSUE DETAILS LOADING */}
+
+      {selectedIssueId && detailsLoading && (
+        <div className="mt-10 p-6 rounded-xl bg-gray-900 border border-gray-800">
+          <p className="text-gray-300">
+            Loading the complete troubleshooting guide...
+          </p>
+        </div>
+      )}
+
+      {/* ISSUE DETAILS ERROR */}
+
+      {selectedIssueId && detailsError && (
+        <div className="mt-10 p-5 rounded-xl bg-red-950/30 border border-red-800">
+          <h3 className="font-semibold text-red-300">
+            Failed to load issue details
+          </h3>
+
+          <p className="text-sm text-red-200 mt-2">
+            {detailsError}
+          </p>
+
+          <button
+            onClick={() => handleSelectIssue(selectedIssueId)}
+            className="mt-4 px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
+      {/* COMPLETE ISSUE DETAILS */}
+
       {searchResponse && selectedIssue && (
         <div className="mt-10">
           <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
             <button
-              onClick={() => {
-                setSelectedIssueId(null);
-                setCopyError("");
-                setCopiedCommand("");
-              }}
+              onClick={handleBackToResults}
               className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm"
             >
               ← Back to results
@@ -657,6 +782,8 @@ function IssueHelp({ onBack }: IssueHelpProps) {
               )}
             </div>
 
+            {/* SOLUTIONS */}
+
             {selectedIssue.solutions.length === 0 && (
               <p className="text-sm text-yellow-300 mt-6">
                 This issue has no saved solutions yet.
@@ -695,8 +822,12 @@ function IssueHelp({ onBack }: IssueHelpProps) {
               </div>
             ))}
 
+            {/* ISSUE-LEVEL TUTORIALS */}
+
             {renderTutorials(selectedIssue.tutorials)}
           </div>
+
+          {/* COPY ERROR */}
 
           {copyError && (
             <div className="mt-5 p-3 rounded-lg bg-yellow-950/30 border border-yellow-800">
