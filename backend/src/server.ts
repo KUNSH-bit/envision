@@ -5,6 +5,7 @@ import express from 'express';
 
 import {prisma} from './prisma.js';
 import issuesRouter from './routes/issues.js';
+import tutorialsRouter from './routes/tutorials.js';
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ app.get('/api/health/db', async (req, res) => {
 
 // Issue search API
 app.use('/api/issues', issuesRouter);
+app.use('/api/tutorials', tutorialsRouter);
 
 app.listen(PORT, () => {
   console.log(`DevSetup backend running on port ${PORT}`);
