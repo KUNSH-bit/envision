@@ -358,7 +358,7 @@ function App() {
               ref={manualPlanRef}
               className="mt-8 scroll-mt-8"
             >
-              <SetupPlanView plan={generatedPlan} />
+              <SetupPlanView plan={generatedPlan} config={config} />
             </div>
           </div>
         )}

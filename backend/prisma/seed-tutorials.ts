@@ -3,7 +3,7 @@ import 'dotenv/config';
 
 import {PrismaPg} from '@prisma/adapter-pg';
 
-import {PrismaClient} from '../src/generated/prisma/client.js';
+import {OperatingSystem, PrismaClient} from '../src/generated/prisma/client.js';
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -21,7 +21,7 @@ const tutorials = [
     description:
         'Install the GCC C++ compiler using MSYS2 UCRT64 and verify that it works.',
     language: 'C++',
-    os: 'WINDOWS',
+    os: OperatingSystem.WINDOWS,
     osVersion: 'Windows 10 (1809+) / Windows 11',
     status: 'DRAFT',
     version: 1,
@@ -93,7 +93,7 @@ const tutorials = [
     description:
         'Install Python using the official Python install manager and create an isolated project environment.',
     language: 'Python',
-    os: 'WINDOWS',
+    os: OperatingSystem.WINDOWS,
     osVersion: 'Windows 10 / Windows 11',
     status: 'DRAFT',
     version: 1,
@@ -175,7 +175,7 @@ const tutorials = [
     description:
         'Install the Node.js LTS release and verify Node.js and npm from PowerShell.',
     language: 'Node.js',
-    os: 'WINDOWS',
+    os: OperatingSystem.WINDOWS,
     osVersion: 'Windows 10 / Windows 11',
     status: 'DRAFT',
     version: 1,
@@ -246,7 +246,7 @@ const tutorials = [
     description:
         'Install Microsoft Build of OpenJDK 21 and verify the Java runtime and compiler.',
     language: 'Java',
-    os: 'WINDOWS',
+    os: OperatingSystem.WINDOWS,
     osVersion: 'Windows 10 / Windows 11',
     status: 'DRAFT',
     version: 1,
@@ -319,7 +319,7 @@ const tutorials = [
     description:
         'Install the Rust compiler and Cargo package manager using the official rustup installer.',
     language: 'Rust',
-    os: 'WINDOWS',
+    os: OperatingSystem.WINDOWS,
     osVersion: 'Windows 10 / Windows 11',
     status: 'DRAFT',
     version: 1,
